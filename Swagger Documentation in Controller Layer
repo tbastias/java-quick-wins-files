@@ -1,0 +1,295 @@
+# Swagger Documentation in Controller Layer
+
+Based on the analysis of `EmployeesController.java`, this document describes the format and structure of Swagger annotations used in the Novatium API.
+
+## Overview
+
+The API uses **OpenAPI 3.0** annotations (`io.swagger.v3.oas.annotations`) to generate comprehensive API documentation. The annotations provide detailed information about endpoints, parameters, responses, and examples.
+
+## Required Imports
+
+```java
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+```
+
+## Controller-Level Annotations
+
+### @Tag
+Used at the class level to group related endpoints:
+
+```java
+@RestController
+@RequestMapping("/api/v1/employees")
+@Tag(name = "Employees")
+public class EmployeesController {
+    // ...
+}
+```
+
+**Purpose**: Creates a logical grouping for all endpoints in the controller.
+
+## Method-Level Annotations
+
+### @Operation
+Describes the endpoint operation:
+
+```java
+@Operation(
+    summary = "Get paginated results of employees", 
+    description = "Returns paginated list of employees with filters. The estado parameter accepts: 'Actual', 'Baja' or null for all"
+)
+```
+
+**Attributes**:
+- `summary`: Brief description (1-2 sentences)
+- `description`: Detailed explanation including parameter constraints
+
+### @ApiResponses
+Defines all possible responses for an endpoint:
+
+```java
+@ApiResponses(value = {
+    @ApiResponse(responseCode = "200", description = "..."),
+    @ApiResponse(responseCode = "400", description = "..."),
+    @ApiResponse(responseCode = "404", description = "..."),
+    @ApiResponse(responseCode = "500", description = "...")
+})
+```
+
+**Common Response Codes**:
+- `200`: Success (GET, PUT)
+- `201`: Created (POST)
+- `400`: Bad Request/Validation Error
+- `403`: Access Denied
+- `404`: Not Found
+- `409`: Conflict (e.g., duplicate DNI)
+- `500`: Internal Server Error
+
+## Response Structure
+
+Each @ApiResponse contains:
+
+### @Content
+Defines the response media type and structure:
+
+```java
+@ApiResponse(
+    responseCode = "200", 
+    description = "Paginated results of employees retrieved successfully",
+    content = @Content(
+        mediaType = "application/json",
+        schema = @Schema(implementation = ar.com.midasconsultores.novatium_api.dto.response.ApiResponse.class),
+        examples = @ExampleObject(...)
+    )
+)
+```
+
+**Attributes**:
+- `mediaType`: Always `"application/json"`
+- `schema`: Reference to the response class
+- `examples`: Concrete example of the response
+
+### @ExampleObject
+Provides a complete JSON example:
+
+```java
+@ExampleObject(
+    name = "SuccessResponse",
+    value = """
+    {
+      "status": 200,
+      "message": null,
+      "data": [
+        {
+          "employeeId": 1,
+          "dni": "12345678",
+          "nombre": "Juan",
+          "apellido": "Perez",
+          "email": "juan.perez@company.com",
+          "legajo": 1001,
+          "estado": "Actual"
+        }
+      ],
+      "pagination": {
+        "sort": ["id"],
+        "dir": ["DESC"],
+        "count": 150,
+        "page": 1,
+        "size": 20,
+        "totalPages": 8
+      },
+      "timestamp": "2026-03-27 16:10:00"
+    }
+    """
+)
+```
+
+**Attributes**:
+- `name`: Descriptive name for the example
+- `value`: JSON example using text blocks (`"""`)
+
+## Parameter Annotations
+
+### @Parameter
+Describes method parameters:
+
+```java
+public ResponseEntity<ApiResponse> getEmpleadoById(
+    @Parameter(description = "ID del empleado") 
+    @PathVariable Long id
+) {
+    // ...
+}
+```
+
+**Common Usage**:
+- Path variables: `@Parameter(description = "...") @PathVariable`
+- Request parameters: Usually documented in @Operation description
+
+## Standard Response Format
+
+All API responses follow this structure:
+
+```json
+{
+  "status": 200,
+  "message": null,
+  "data": { ... },
+  "pagination": { ... }, // Only for paginated endpoints
+  "error": { ... },      // Only for error responses
+  "timestamp": "2026-03-27 16:10:00"
+}
+```
+
+### Error Response Format
+
+```json
+{
+  "status": 400,
+  "message": null,
+  "data": null,
+  "error": {
+    "key": "app.employee.validationError",
+    "message": "Validation failed for employee data",
+    "traceId": "e04775ed-310d-4227-b9f14-394bab543aad"
+  },
+  "timestamp": "2026-03-27 16:10:00"
+}
+```
+
+## Best Practices
+
+### 1. Consistent Structure
+- Always include all possible response codes
+- Use consistent error format with `key`, `message`, and `traceId`
+- Include timestamp in all responses
+
+### 2. Detailed Examples
+- Provide complete, realistic JSON examples
+- Include all fields that can appear in the response
+- Use consistent date/time format: `"2026-03-27 16:10:00"`
+
+### 3. Clear Descriptions
+- **summary**: Brief, action-oriented description
+- **description**: Detailed explanation including constraints
+- Parameter descriptions: Clear and concise
+
+### 4. Response Code Mapping
+- `200`: Successful retrieval/update
+- `201`: Successful creation
+- `400`: Validation errors, invalid parameters
+- `403`: Permission/role-based access denied
+- `404`: Resource not found
+- `409`: Business logic conflicts (duplicates, etc.)
+- `500`: Unexpected server errors
+
+## Complete Example
+
+Here's a complete endpoint annotation example:
+
+```java
+@GetMapping
+@Operation(summary = "Get paginated results of employees", description = "Returns paginated list of employees with filters. The estado parameter accepts: 'Actual', 'Baja' or null for all")
+@ApiResponses(value = {
+    @ApiResponse(
+        responseCode = "200", 
+        description = "Paginated results of employees retrieved successfully",
+        content = @Content(
+            mediaType = "application/json",
+            schema = @Schema(implementation = ApiResponse.class),
+            examples = @ExampleObject(
+                name = "SuccessResponse",
+                value = """
+                {
+                  "status": 200,
+                  "message": null,
+                  "data": [
+                    {
+                      "employeeId": 1,
+                      "dni": "12345678",
+                      "nombre": "Juan",
+                      "apellido": "Perez",
+                      "email": "juan.perez@company.com",
+                      "legajo": 1001,
+                      "estado": "Actual"
+                    }
+                  ],
+                  "pagination": {
+                    "sort": ["id"],
+                    "dir": ["DESC"],
+                    "count": 150,
+                    "page": 1,
+                    "size": 20,
+                    "totalPages": 8
+                  },
+                  "timestamp": "2026-03-27 16:10:00"
+                }
+                """
+            )
+        )
+    ),
+    @ApiResponse(
+        responseCode = "400", 
+        description = "Bad request - Invalid parameters",
+        content = @Content(
+            mediaType = "application/json",
+            schema = @Schema(implementation = ApiResponse.class),
+            examples = @ExampleObject(
+                name = "BadRequest",
+                value = """
+                {
+                  "status": 400,
+                  "message": null,
+                  "data": null,
+                  "error": {
+                    "key": "app.employee.invalidParameters",
+                    "message": "Invalid request parameters provided",
+                    "traceId": "e04775ed-310d-4227-b9f14-394bab543aad"
+                  },
+                  "timestamp": "2026-03-27 16:10:00"
+                }
+                """
+            )
+        )
+    )
+})
+public ResponseEntity<ApiResponse> getEmpleados(/* parameters */) {
+    // implementation
+}
+```
+
+## Schema References
+
+The annotations consistently reference:
+- `ar.com.midasconsultores.novatium_api.dto.response.ApiResponse` for all responses
+- Specific DTOs for different operations (e.g., `EmpleadoDetalleDto`)
+- Standard error format with `key`, `message`, and `traceId`
+
+This format ensures comprehensive, consistent API documentation that helps developers understand and integrate with the Novatium API effectively.
