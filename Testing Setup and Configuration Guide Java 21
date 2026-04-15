@@ -1,0 +1,380 @@
+# Testing Setup and Configuration Guide Java 21
+
+## Maven Dependencies
+
+### Required Dependencies for Testing
+
+```xml
+<dependencies>
+    <!-- JUnit 5 -->
+    <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>5.8.2</version>
+        <scope>test</scope>
+    </dependency>
+    
+    <!-- Mockito Core -->
+    <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <version>4.5.1</version>
+        <scope>test</scope>
+    </dependency>
+    
+    <!-- Mockito JUnit Jupiter Integration -->
+    <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-junit-jupiter</artifactId>
+        <version>4.5.1</version>
+        <scope>test</scope>
+    </dependency>
+    
+    <!-- Mockito Inline (for static/final mocking) -->
+    <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-inline</artifactId>
+        <version>3.12.4</version>
+        <scope>test</scope>
+    </dependency>
+    
+    <!-- Spring Boot Test -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+```
+
+### Maven Surefire Plugin Configuration
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <version>3.0.0-M7</version>
+            <configuration>
+                <includes>
+                    <include>**/*Test.java</include>
+                    <include>**/*Tests.java</include>
+                </includes>
+                <excludes>
+                    <exclude>**/*IntegrationTest.java</exclude>
+                </excludes>
+                <argLine>
+                    --add-opens java.base/java.lang=ALL-UNNAMED
+                    --add-opens java.base/java.util=ALL-UNNAMED
+                </argLine>
+            </configuration>
+        </plugin>
+        
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <version>3.10.1</version>
+            <configuration>
+                <source>17</source>
+                <target>17</target>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
+```
+
+## Test Class Structure
+
+### Test Class Template
+
+```java
+package com.midasconsultores.example.service;
+
+import com.midas.catalogo_common.entity.Entity;
+import com.midas.catalogo_common.repository.Repository;
+import com.midasconsultores.example.service.impl.ServiceImpl;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+@DisplayName("Service Name Tests")
+public class ServiceTest {
+
+    // Mock all dependencies
+    @Mock
+    private Repository repository;
+    
+    @Mock
+    private OtherRepository otherRepository;
+    
+    // Inject mocks into the service being tested
+    @InjectMocks
+    private ServiceImpl service;
+    
+    // Test data objects
+    private Entity testEntity;
+    private static final Long TEST_ID = 1L;
+    
+    // Setup method runs before each test
+    @BeforeEach
+    @DisplayName("Setup test data")
+    void setUp() {
+        // Initialize test data
+        testEntity = new Entity();
+        testEntity.setId(TEST_ID);
+        testEntity.setName("Test Entity");
+    }
+    
+    // Individual test methods
+    @Test
+    @DisplayName("🔍 methodName() should do something when condition")
+    void methodName_Scenario_ExpectedResult() {
+        // Test implementation
+    }
+}
+```
+
+### Test Data Setup Patterns
+
+#### Using @BeforeEach for Common Setup
+```java
+@BeforeEach
+void setUp() {
+    // Create test entities
+    entityPriority1 = new EntityPriority();
+    entityPriority1.setId(1L);
+    entityPriority1.setEntityName("Entity1");
+    entityPriority1.setPriority(1);
+
+    entityPriority2 = new EntityPriority();
+    entityPriority2.setId(2L);
+    entityPriority2.setEntityName("Entity2");
+    entityPriority2.setPriority(2);
+
+    entityPriorityList = Arrays.asList(entityPriority1, entityPriority2);
+    
+    // Configure complex mock object
+    mockEntityPriority = new EntityPriority();
+    mockEntityPriority.setId(ENTITY_ID);
+    mockEntityPriority.setEntityCode(ENTITY_CODE);
+    mockEntityPriority.setEntityProvinceExcluded(new ArrayList<>());
+    mockEntityPriority.setEntityZonesExcluded(new ArrayList<>());
+}
+```
+
+#### Test-Specific Constants
+```java
+private static final Long ENTITY_ID = 1L;
+private static final String ENTITY_CODE = "CODE01";
+private static final String PROVINCE_CODE_1 = "P01";
+private static final String ZONE_CODE_1 = "Z01";
+```
+
+#### Factory Methods for Test Data
+```java
+private EntityPriority createTestEntityPriority(Long id, String name, int priority) {
+    EntityPriority entity = new EntityPriority();
+    entity.setId(id);
+    entity.setEntityName(name);
+    entity.setPriority(priority);
+    return entity;
+}
+
+private Users createTestUser(Long id) {
+    Users user = new Users();
+    user.setId(id);
+    user.setUsername("testuser" + id);
+    return user;
+}
+```
+
+## IDE Configuration
+
+### IntelliJ IDEA Setup
+
+1. **Enable JUnit 5 Support**
+   - File → Settings → Build, Execution, Deployment → Build Tools → Maven → Running Tests
+   - Ensure "Use JUnit 5" is selected
+
+2. **Test Generation Templates**
+   - Settings → Editor → File and Code Templates → Code → Test Method
+   ```java
+   @Test
+   void $test_name$() {
+       // Arrange
+       
+       // Act
+       
+       // Assert
+   }
+   ```
+
+3. **Live Templates for Testing**
+   - Settings → Editor → Live Templates
+   - Create template "test" with:
+   ```java
+   @Test
+   void $METHOD_NAME$_$SCENARIO$_$EXPECTED$() {
+       // Arrange
+       $ARRANGE$
+       
+       // Act
+       $ACT$
+       
+       // Assert
+       $ASSERT$
+   }
+   ```
+
+### VS Code Setup
+
+1. **Java Test Runner Extension**
+   - Install "Test Runner for Java" by Microsoft
+
+2. **Settings for Test Discovery**
+   ```json
+   {
+       "java.test.config": {
+           "vmArgs": [
+               "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+               "--add-opens", "java.base/java.util=ALL-UNNAMED"
+           ]
+       }
+   }
+   ```
+
+## Running Tests
+
+### Command Line
+
+#### Run All Tests
+```bash
+mvn test
+```
+
+#### Run Specific Test Class
+```bash
+mvn test -Dtest=EntityPriorityTest
+```
+
+#### Run Specific Test Method
+```bash
+mvn test -Dtest=EntityPriorityTest#getEntityPriorityShouldReturnEntityPriorityWhenIdExists
+```
+
+#### Run Tests with Coverage
+```bash
+mvn test jacoco:report
+```
+
+#### Run Tests in Parallel
+```bash
+mvn test -T 4  # Use 4 threads
+```
+
+#### Skip Tests
+```bash
+mvn install -DskipTests
+```
+
+#### Run Integration Tests Only
+```bash
+mvn test -Dtest="**/*IntegrationTest"
+```
+
+### IDE Shortcuts
+
+#### IntelliJ IDEA
+- **Run All Tests**: `Ctrl+Shift+F10`
+- **Run Current Test Class**: `Ctrl+Shift+F10` (on test class)
+- **Run Current Test Method**: `Ctrl+Shift+F10` (on test method)
+- **Debug Test**: `Shift+F9`
+
+#### VS Code
+- **Run All Tests**: `Ctrl+;` then `Run All Tests`
+- **Run Current Test**: `Ctrl+;` then `Run Test`
+- **Debug Test**: `Ctrl+;` then `Debug Test`
+
+## Test Configuration Files
+
+### application-test.properties
+```properties
+# Test database configuration
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+
+# JPA configuration for tests
+spring.jpa.hibernate.ddl-auto=create-drop
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+
+# Disable unnecessary features for tests
+spring.security.enabled=false
+spring.cloud.config.enabled=false
+eureka.client.enabled=false
+```
+
+## Troubleshooting
+
+### Common Issues and Solutions
+
+#### Mockito Java 21 Compatibility
+```xml
+<!-- Use newer Mockito version for Java 21 -->
+<dependency>
+    <groupId>org.mockito</groupId>
+    <artifactId>mockito-core</artifactId>
+    <version>5.1.1</version>
+    <scope>test</scope>
+</dependency>
+```
+
+#### Module System Issues
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <configuration>
+        <argLine>
+            --add-opens java.base/java.lang=ALL-UNNAMED
+            --add-opens java.base/java.util=ALL-UNNAMED
+        </argLine>
+    </configuration>
+</plugin>
+```
+
+#### Memory Issues in Tests
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <configuration>
+        <argLine>-Xmx1024m</argLine>
+    </configuration>
+</plugin>
+```
+
+#### Test Ordering Issues
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <configuration>
+        <runOrder>random</runOrder>
+    </configuration>
+</plugin>
+```
