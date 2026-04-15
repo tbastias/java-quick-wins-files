@@ -1,0 +1,245 @@
+# ServiceException Class Documentation
+
+## Simple Explanation
+
+**ServiceException** is a custom exception class used for handling business logic errors in a structured way. Instead of throwing generic exceptions, it provides detailed error information including:
+
+- **Error level** (WARN or ERROR)
+- **HTTP status code** (like 404, 500, etc.)
+- **Error code** (unique identifier for each error type)
+- **Resource name** (what part of the system failed)
+- **Validation errors** (for form validation failures)
+- **Additional data** (extra context information)
+
+## Class Structure
+
+### Package Location
+```java
+package com.midas.project.exception;
+```
+
+### Class Definition
+```java
+public class ServiceException extends Exception
+```
+
+### Fields (Properties)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `level` | `Level` | Error severity level (WARN or ERROR) |
+| `status` | `HttpStatus` | HTTP status code for the response |
+| `code` | `ExceptionErrorEnum` | Unique error code identifier |
+| `resource` | `String` | Name of the resource that caused the error |
+| `errors` | `List<ObjectError>` | Validation errors (for form validation) |
+| `dataMessage` | `Map<String, Object>` | Additional context data |
+
+### Required Dependencies
+
+```java
+import org.springframework.http.HttpStatus;
+import org.springframework.validation.ObjectError;
+import java.util.List;
+import java.util.Map;
+```
+
+### Supporting Enums
+
+#### Level Enum
+```java
+public enum Level {
+    WARN,
+    ERROR;
+}
+```
+
+#### ExceptionErrorEnum
+
+**Note:** `ExceptionErrorEnum` is different for every repository but always includes the general exceptions:
+
+```java
+public enum ExceptionErrorEnum {
+    // General exceptions (always present)
+    BAD_REQUEST("SYST-0001"),
+    HANDLE_SERVER_EXCEPTION("SYST-0002"),
+    ACCESS_DENIED("SYST-0003"),
+    UNAUTHORIZED("SYST-0004"),
+    BUSINESS_ERROR("SYST-0005"),
+    
+    // Attribute and forms exceptions (always present)
+    REQUIRED_ATTRIBUTE("ATTR-0001"),
+    INVALID_VALUE("ATTR-0002"),
+    
+    // Repository-specific exceptions (vary by repository)
+    // Example for user service:
+    USER_NOT_FOUND("USER-0001"),
+    USER_ALREADY_EXISTS("USER-0007"),
+    
+    // Example for project service:
+    PROJECT_NOT_FOUND("PROJ-0001"),
+    PROJECT_DELETED("PROJ-0002"),
+    
+    // Example for resource service:
+    RESOURCE_NOT_FOUND("RES-0001"),
+    RESOURCE_NOT_ASSOCIATED("RES-0002"),
+    USER_NOT_IN_PROJECT("USER-0003"),
+    
+    // ... add your repository-specific codes here
+}
+```
+
+## Constructors
+
+### Basic Constructors
+```java
+// Simple message
+public ServiceException(String message)
+
+// Message with resource
+public ServiceException(String message, String resource)
+
+// Message with cause
+public ServiceException(String message, Throwable cause)
+
+// Level and message
+public ServiceException(Level level, String message)
+```
+
+### Advanced Constructors
+```java
+// Full constructor (most complete)
+public ServiceException(Level level, String message, ExceptionErrorEnum code, 
+                       String resource, List<ObjectError> errors, 
+                       Map<String, Object> dataMessage, HttpStatus status, 
+                       Throwable cause)
+
+// Common combinations
+public ServiceException(Level level, String message, Throwable cause)
+public ServiceException(Level level, String message, String resource, Throwable cause)
+public ServiceException(String message, String resource, HttpStatus status, ExceptionErrorEnum code)
+public ServiceException(ExceptionErrorEnum code, String message)
+```
+
+## Usage Examples
+
+### Basic Usage
+```java
+// Simple error
+throw new ServiceException("User not found");
+
+// With resource and HTTP status
+throw new ServiceException("User not found", "users", HttpStatus.NOT_FOUND, ExceptionErrorEnum.USER_NOT_FOUND);
+
+// Note: The second parameter ("users") refers to the resource name
+```
+
+### Advanced Usage
+```java
+// With validation errors
+List<ObjectError> validationErrors = validator.validate(userDTO);
+throw new ServiceException(Level.ERROR, "Validation failed", 
+                          ExceptionErrorEnum.INVALID_VALUE, 
+                          "users", validationErrors, null, 
+                          HttpStatus.BAD_REQUEST, null);
+
+// With additional data
+Map<String, Object> data = new HashMap<>();
+data.put("userId", userId);
+data.put("attemptedAction", "delete");
+throw new ServiceException(Level.ERROR, HttpStatus.FORBIDDEN, 
+                          ExceptionErrorEnum.USER_NO_PERMISSIONS, data);
+```
+
+### Real-World Examples from Codebase
+```java
+// Catalog client deleted check
+if (StatusEnum.getByValue(catalogClient.getStatus()) == StatusEnum.DELETED) {
+    throw new ServiceException("Cliente catálogo eliminado", "catalogClients", 
+                              HttpStatus.CONFLICT, ExceptionErrorEnum.CATALOG_CLIENT_DELETED);
+}
+
+// Resource not associated with project
+if (!project.getResources().contains(resource)) {
+    throw new ServiceException("Resource not associated with project", "resource", 
+                              HttpStatus.CONFLICT, ExceptionErrorEnum.RESOURCE_NOT_ASSOCIATED);
+}
+
+// User not in project
+throw new ServiceException(Level.ERROR, "User not associated with project", 
+                          HttpStatus.CONFLICT, ExceptionErrorEnum.USER_NOT_IN_PROJECT);
+```
+
+## Getters
+
+```java
+public Level getLevel()
+public HttpStatus getStatus()
+public ExceptionErrorEnum getCode()
+public String getResource()
+public List<ObjectError> getErrors()
+public Map<String, Object> getDataMessage()
+```
+
+## Import Requirements for Other Repositories
+
+To use this class in another repository, you need to:
+
+### 1. Copy these files to your common module:
+- `ServiceException.java`
+- `Level.java`
+- `ExceptionErrorEnum.java` (create your own with general exceptions + repository-specific ones)
+
+### 2. Add these dependencies to your `pom.xml`:
+```xml
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-web</artifactId>
+    <version>5.x.x</version> <!-- Use your Spring version -->
+</dependency>
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-context</artifactId>
+    <version>5.x.x</version>
+</dependency>
+```
+
+### 3. Update package names if needed:
+Change `com.midas.project.exception` to your own package structure.
+
+## Best Practices
+
+1. **Use specific error codes** - Always use appropriate `ExceptionErrorEnum` values
+2. **Provide meaningful messages** - Error messages should be clear and actionable
+3. **Include resource names** - Specify which resource caused the error
+4. **Use appropriate HTTP status codes** - Match the status to the error type
+5. **Add context data** - Use `dataMessage` for additional debugging information
+6. **Choose correct level** - Use `WARN` for recoverable issues, `ERROR` for serious problems
+
+## Integration with Exception Handlers
+
+This exception is designed to work with Spring's `@ControllerAdvice` exception handlers:
+
+```java
+@ControllerAdvice
+public class GlobalExceptionHandler {
+    
+    @ExceptionHandler(ServiceException.class)
+    public ResponseEntity<ApiResponse> handleServiceException(ServiceException ex) {
+        ApiResponse response = new ApiResponse(
+            ex.getCode().getCode(),
+            ex.getMessage(),
+            ex.getResource(),
+            ex.getErrors(),
+            ex.getDataMessage()
+        );
+        return ResponseEntity.status(ex.getStatus()).body(response);
+    }
+}
+```
+
+## SerialVersionUID
+```java
+private static final long serialVersionUID = -4486285316041419025L;
+```
+
+This ensures consistent serialization across different JVM instances.
