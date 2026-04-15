@@ -1,0 +1,693 @@
+# API Response System Integration Guide
+
+## Overview
+
+This guide explains how to implement a standardized API response system using `ApiResponse`, `ApiError`, and `ApiErrorItem` objects to avoid inconsistent error responses and provide detailed validation feedback.
+
+## System Architecture
+
+### Core Components
+
+1. **GlobalExceptionHandler**: Centralized exception handling using `@ControllerAdvice`
+2. **ApiResponse**: Standard response wrapper for all API endpoints
+3. **ApiError**: Structured error information with support for multiple error items
+4. **ServiceException**: Custom exception for business logic errors
+5. **ExceptionErrorEnum**: Enumeration of standardized error codes
+
+### Response Structure
+
+```json
+{
+  "status": 400,
+  "message": "Validation failed",
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request validation failed",
+    "traceId": "2885b0a7-34ce-49e7-bc82-19d70d22d45c",
+    "errors": [
+      {
+        "field": "email",
+        "message": "Invalid email format",
+        "code": "EMAIL_INVALID"
+      },
+      {
+        "field": "name", 
+        "message": "Name is required",
+        "code": "NAME_REQUIRED"
+      }
+    ]
+  },
+  "timestamp": "2026-04-01T16:45:48"
+}
+```
+
+## Implementation Steps
+
+### Step 1: Create DTO Classes
+
+#### ApiResponse.java
+```java
+package com.yourcompany.dto;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+import org.springframework.http.HttpStatus;
+import java.time.LocalDateTime;
+
+public class ApiResponse {
+    private Integer status;
+    private String message;
+    private Object data;
+    private ApiError error;
+    
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime timestamp;
+    
+    private PaginationInfo pagination;
+    
+    // Success response with data
+    public ApiResponse(HttpStatus status, String message, Object data) {
+        this.status = status.value();
+        this.message = message;
+        this.data = data;
+        this.timestamp = LocalDateTime.now();
+    }
+    
+    // Error response with ApiError
+    public ApiResponse(HttpStatus status, String message, ApiError error) {
+        this.status = status.value();
+        this.message = message;
+        this.error = error;
+        this.timestamp = LocalDateTime.now();
+    }
+    
+    // Paginated response
+    public ApiResponse(Object data, PaginationInfo pagination) {
+        this.status = HttpStatus.OK.value();
+        this.data = data;
+        this.pagination = pagination;
+        this.timestamp = LocalDateTime.now();
+    }
+    
+    // Getters and setters...
+    public Integer getStatus() { return status; }
+    public void setStatus(Integer status) { this.status = status; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    public Object getData() { return data; }
+    public void setData(Object data) { this.data = data; }
+    public ApiError getError() { return error; }
+    public void setError(ApiError error) { this.error = error; }
+    public LocalDateTime getTimestamp() { return timestamp; }
+    public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
+    public PaginationInfo getPagination() { return pagination; }
+    public void setPagination(PaginationInfo pagination) { this.pagination = pagination; }
+}
+```
+
+#### ApiError.java
+```java
+package com.yourcompany.dto;
+
+import java.util.List;
+import java.util.UUID;
+
+public class ApiError {
+    private String code;
+    private String message;
+    private String traceId;
+    private List<ApiErrorItem> errors;
+    
+    public ApiError() {
+        this.traceId = UUID.randomUUID().toString();
+    }
+    
+    public ApiError(String code, String message, List<ApiErrorItem> errors) {
+        this();
+        this.code = code;
+        this.message = message;
+        this.errors = errors;
+    }
+    
+    // Getters and setters...
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    public String getTraceId() { return traceId; }
+    public void setTraceId(String traceId) { this.traceId = traceId; }
+    public List<ApiErrorItem> getErrors() { return errors; }
+    public void setErrors(List<ApiErrorItem> errors) { this.errors = errors; }
+}
+```
+
+#### ApiErrorItem.java
+```java
+package com.yourcompany.dto;
+
+public class ApiErrorItem {
+    private String field;
+    private String message;
+    private String code;
+    
+    public ApiErrorItem(String field, String message, String code) {
+        this.field = field;
+        this.message = message;
+        this.code = code;
+    }
+    
+    // Getters and setters...
+    public String getField() { return field; }
+    public void setField(String field) { this.field = field; }
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
+}
+```
+
+#### PaginationInfo.java
+```java
+package com.yourcompany.dto;
+
+public class PaginationInfo {
+    private Integer currentPage;
+    private Integer totalPages;
+    private Long totalElements;
+    private Integer size;
+    private Boolean first;
+    private Boolean last;
+    
+    // Constructors, getters and setters...
+    public PaginationInfo(Integer currentPage, Integer totalPages, Long totalElements, 
+                         Integer size, Boolean first, Boolean last) {
+        this.currentPage = currentPage;
+        this.totalPages = totalPages;
+        this.totalElements = totalElements;
+        this.size = size;
+        this.first = first;
+        this.last = last;
+    }
+    
+    // Getters and setters...
+    public Integer getCurrentPage() { return currentPage; }
+    public void setCurrentPage(Integer currentPage) { this.currentPage = currentPage; }
+    public Integer getTotalPages() { return totalPages; }
+    public void setTotalPages(Integer totalPages) { this.totalPages = totalPages; }
+    public Long getTotalElements() { return totalElements; }
+    public void setTotalElements(Long totalElements) { this.totalElements = totalElements; }
+    public Integer getSize() { return size; }
+    public void setSize(Integer size) { this.size = size; }
+    public Boolean getFirst() { return first; }
+    public void setFirst(Boolean first) { this.first = first; }
+    public Boolean getLast() { return last; }
+    public void setLast(Boolean last) { this.last = last; }
+}
+```
+
+### Step 2: Create Exception Classes
+
+#### ServiceException.java
+```java
+package com.yourcompany.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.validation.ObjectError;
+import java.util.List;
+import java.util.Map;
+
+public class ServiceException extends Exception {
+    private final HttpStatus status;
+    private final ExceptionErrorEnum code;
+    private final String resource;
+    private final List<ObjectError> validationErrors;
+    private final Map<String, Object> data;
+    
+    public ServiceException(String resource, HttpStatus status, ExceptionErrorEnum code, List<ObjectError> validationErrors) {
+        super(resource);
+        this.resource = resource;
+        this.status = status;
+        this.code = code;
+        this.validationErrors = validationErrors;
+        this.data = null;
+    }
+    
+    public ServiceException(String resource, HttpStatus status, ExceptionErrorEnum code) {
+        this(resource, status, code, null);
+    }
+    
+    public ServiceException(String message, HttpStatus status, ExceptionErrorEnum code, Map<String, Object> data) {
+        super(message);
+        this.resource = null;
+        this.status = status;
+        this.code = code;
+        this.validationErrors = null;
+        this.data = data;
+    }
+    
+    // Getters...
+    public HttpStatus getStatus() { return status; }
+    public ExceptionErrorEnum getCode() { return code; }
+    public String getResource() { return resource; }
+    public List<ObjectError> getValidationErrors() { return validationErrors; }
+    public Map<String, Object> getData() { return data; }
+}
+```
+
+#### ExceptionErrorEnum.java
+```java
+package com.yourcompany.exception;
+
+public enum ExceptionErrorEnum {
+    // Validation errors
+    VALIDATION_ERROR("VAL-001", "Validation error"),
+    EMPLOYEE_VALIDATION_ERROR("EMPL-001", "Employee validation error"),
+    
+    // Business logic errors
+    EMPLOYEE_DNI_EXISTS("EMPL-002", "Employee DNI already exists"),
+    EMPLOYEE_NOT_FOUND("EMPL-003", "Employee not found"),
+    
+    // System errors
+    INTERNAL_ERROR("SYS-001", "Internal system error"),
+    DATABASE_ERROR("SYS-002", "Database error");
+    
+    private final String code;
+    private final String description;
+    
+    ExceptionErrorEnum(String code, String description) {
+        this.code = code;
+        this.description = description;
+    }
+    
+    public String getCode() { return code; }
+    public String getDescription() { return description; }
+}
+```
+
+### Step 3: Create GlobalExceptionHandler
+
+#### GlobalExceptionHandler.java
+```java
+package com.yourcompany.exception;
+
+import com.yourcompany.dto.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.validation.ObjectError;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@ControllerAdvice
+public class GlobalExceptionHandler {
+    
+    @ExceptionHandler(ServiceException.class)
+    public ResponseEntity<ApiResponse> handleServiceException(ServiceException ex) {
+        List<ApiErrorItem> errorItems = null;
+        
+        if (ex.getValidationErrors() != null) {
+            errorItems = ex.getValidationErrors().stream()
+                .map(this::convertToApiErrorItem)
+                .collect(Collectors.toList());
+        }
+        
+        ApiError apiError = new ApiError(
+            ex.getCode().getCode(),
+            ex.getResource() != null ? ex.getResource() : ex.getMessage(),
+            errorItems
+        );
+        
+        ApiResponse response = new ApiResponse(
+            ex.getStatus(),
+            ex.getResource() != null ? ex.getResource() : ex.getMessage(),
+            apiError
+        );
+        
+        return ResponseEntity.status(ex.getStatus()).body(response);
+    }
+    
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse> handleDefaultException(Exception ex) {
+        ApiError apiError = new ApiError(
+            ExceptionErrorEnum.INTERNAL_ERROR.getCode(),
+            "An unexpected error occurred",
+            null
+        );
+        
+        ApiResponse response = new ApiResponse(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            "Internal server error",
+            apiError
+        );
+        
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    }
+    
+    private ApiErrorItem convertToApiErrorItem(ObjectError error) {
+        String field = error.getObjectName();
+        if (error.getArguments() != null && error.getArguments().length > 1) {
+            field = (String) error.getArguments()[1];
+        }
+        
+        return new ApiErrorItem(
+            field,
+            error.getDefaultMessage(),
+            ExceptionErrorEnum.VALIDATION_ERROR.getCode()
+        );
+    }
+}
+```
+
+### Step 4: Controller Implementation
+
+#### EmployeeController.java
+```java
+package com.yourcompany.controller;
+
+import com.yourcompany.dto.ApiResponse;
+import com.yourcompany.exception.ServiceException;
+import com.yourcompany.exception.ExceptionErrorEnum;
+import com.yourcompany.dto.EmployeeDTO;
+import com.yourcompany.service.EmployeeService;
+import com.yourcompany.validator.EmployeeValidator;
+import com.yourcompany.mapper.EmployeeMapper;
+import com.yourcompany.service.EmailService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.*;
+
+import java.text.ParseException;
+
+@RestController
+@RequestMapping("/api/v1/employees")
+public class EmployeeController {
+    
+    private static final Logger logger = LoggerFactory.getLogger(EmployeeController.class);
+    
+    @Autowired
+    private EmployeeValidator employeeValidator;
+    
+    @Autowired
+    private EmployeeService employeeService;
+    
+    @Autowired
+    private EmailService emailService;
+    
+    @PostMapping
+    public ResponseEntity<ApiResponse> createEmployee(@RequestBody EmployeeDTO employeeDto, 
+                                                     BindingResult bindingResult) throws ServiceException, ParseException {
+        
+        logger.debug("POST /api/v1/employees");
+        
+        // Validate using EmployeeValidator
+        employeeValidator.validate(employeeDto, bindingResult);
+
+        if (bindingResult.hasErrors()) {
+            throw new ServiceException("employees", HttpStatus.BAD_REQUEST, ExceptionErrorEnum.EMPLOYEE_VALIDATION_ERROR, bindingResult.getAllErrors());
+        }
+
+        // Validate duplicate DNI
+        Long count = employeeService.getCountEmployeeByDNI(employeeDto.getDni(), null);
+        if (count > 0) {
+            throw new ServiceException("employees", HttpStatus.CONFLICT, ExceptionErrorEnum.EMPLOYEE_DNI_EXISTS);
+        }
+
+        Employee employee = employeeService.createEmployee(employeeDto);
+
+        // Send email only on creation
+        emailService.sendWelcomeEmail(employeeService.getEmployeeById(employee.getId()));
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(new ApiResponse(HttpStatus.CREATED, null, EmployeeMapper.toDTO(employee)));
+    }
+    
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse> getEmployee(@PathVariable Long id) throws ServiceException {
+        Employee employee = employeeService.getById(id);
+        return ResponseEntity.ok(new ApiResponse(HttpStatus.OK, null, EmployeeMapper.toDTO(employee)));
+    }
+    
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse> updateEmployee(@PathVariable Long id, 
+                                                     @RequestBody EmployeeDTO employeeDto,
+                                                     BindingResult bindingResult) throws ServiceException, ParseException {
+        
+        logger.debug("PUT /api/v1/employees/{}", id);
+        
+        // Validate using EmployeeValidator
+        employeeValidator.validate(employeeDto, bindingResult);
+
+        if (bindingResult.hasErrors()) {
+            throw new ServiceException("employees", HttpStatus.BAD_REQUEST, ExceptionErrorEnum.EMPLOYEE_VALIDATION_ERROR, bindingResult.getAllErrors());
+        }
+
+        // Validate duplicate DNI (excluding current employee)
+        Long count = employeeService.getCountEmployeeByDNI(employeeDto.getDni(), id);
+        if (count > 0) {
+            throw new ServiceException("employees", HttpStatus.CONFLICT, ExceptionErrorEnum.EMPLOYEE_DNI_EXISTS);
+        }
+
+        Employee employee = employeeService.updateEmployee(id, employeeDto);
+
+        return ResponseEntity.ok(new ApiResponse(HttpStatus.OK, null, EmployeeMapper.toDTO(employee)));
+    }
+    
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse> deleteEmployee(@PathVariable Long id) throws ServiceException {
+        employeeService.deleteEmployee(id);
+        return ResponseEntity.ok(new ApiResponse(HttpStatus.OK, "Employee deleted successfully", null));
+    }
+    
+    @GetMapping
+    public ResponseEntity<ApiResponse> getAllEmployees(@RequestParam(defaultValue = "0") Integer page,
+                                                       @RequestParam(defaultValue = "20") Integer size,
+                                                       @RequestParam(defaultValue = "name") String sort) {
+        
+        logger.debug("GET /api/v1/employees");
+        
+        Page<Employee> employees = employeeService.getAllEmployees(page, size, sort);
+        PaginationInfo paginationInfo = new PaginationInfo(
+            employees.getNumber(),
+            employees.getTotalPages(),
+            employees.getTotalElements(),
+            employees.getSize(),
+            employees.isFirst(),
+            employees.isLast()
+        );
+        
+        return ResponseEntity.ok(new ApiResponse(
+            employees.getContent().stream()
+                .map(EmployeeMapper::toDTO)
+                .collect(Collectors.toList()),
+            paginationInfo
+        ));
+    }
+}
+```
+
+### Step 5: Service Layer Implementation
+
+#### EmployeeService.java
+```java
+package com.yourcompany.service;
+
+import com.yourcompany.exception.ServiceException;
+import com.yourcompany.exception.ExceptionErrorEnum;
+import com.yourcompany.dto.EmployeeDTO;
+import com.yourcompany.entity.Employee;
+import com.yourcompany.repository.EmployeeRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
+import java.text.ParseException;
+
+@Service
+public class EmployeeService {
+    
+    @Autowired
+    private EmployeeRepository employeeRepository;
+    
+    public Employee createEmployee(EmployeeDTO dto) throws ServiceException, ParseException {
+        try {
+            Employee employee = EmployeeMapper.toEntity(dto);
+            return employeeRepository.save(employee);
+        } catch (Exception e) {
+            throw new ServiceException("Error creating employee", HttpStatus.INTERNAL_SERVER_ERROR, ExceptionErrorEnum.DATABASE_ERROR);
+        }
+    }
+    
+    public Employee updateEmployee(Long id, EmployeeDTO dto) throws ServiceException, ParseException {
+        Employee existingEmployee = getById(id);
+        
+        // Update fields
+        existingEmployee.setName(dto.getName());
+        existingEmployee.setEmail(dto.getEmail());
+        existingEmployee.setDni(dto.getDni());
+        
+        try {
+            return employeeRepository.save(existingEmployee);
+        } catch (Exception e) {
+            throw new ServiceException("Error updating employee", HttpStatus.INTERNAL_SERVER_ERROR, ExceptionErrorEnum.DATABASE_ERROR);
+        }
+    }
+    
+    public Employee getById(Long id) throws ServiceException {
+        return employeeRepository.findById(id)
+            .orElseThrow(() -> new ServiceException("employees", HttpStatus.NOT_FOUND, ExceptionErrorEnum.EMPLOYEE_NOT_FOUND));
+    }
+    
+    public Long getCountEmployeeByDNI(String dni, Long excludeId) {
+        if (excludeId != null) {
+            return employeeRepository.countByDniAndIdNot(dni, excludeId);
+        }
+        return employeeRepository.countByDni(dni);
+    }
+    
+    public void deleteEmployee(Long id) throws ServiceException {
+        Employee employee = getById(id);
+        employeeRepository.delete(employee);
+    }
+    
+    public Page<Employee> getAllEmployees(Integer page, Integer size, String sort) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(sort));
+        return employeeRepository.findAll(pageable);
+    }
+}
+```
+
+### Step 6: Component Scanning Configuration
+
+#### MainApplication.java
+```java
+package com.yourcompany;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.ComponentScan;
+
+@SpringBootApplication
+@ComponentScan({
+    "com.yourcompany.controller",
+    "com.yourcompany.service",
+    "com.yourcompany.dto",
+    "com.yourcompany.exception",
+    "com.yourcompany.validator",
+    "com.yourcompany.mapper",
+    "com.yourcompany.repository"
+})
+public class YourApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(YourApplication.class, args);
+    }
+}
+```
+
+## Response Examples
+
+### Success Response
+```json
+{
+  "status": 201,
+  "message": null,
+  "data": {
+    "id": 1,
+    "name": "John Doe",
+    "email": "john@example.com",
+    "dni": "12345678"
+  },
+  "timestamp": "2026-04-01T16:45:48"
+}
+```
+
+### Validation Error Response
+```json
+{
+  "status": 400,
+  "message": "employees",
+  "error": {
+    "code": "EMPL-001",
+    "message": "employees",
+    "traceId": "2885b0a7-34ce-49e7-bc82-19d70d22d45c",
+    "errors": [
+      {
+        "field": "name",
+        "message": "Name is required",
+        "code": "VAL-001"
+      },
+      {
+        "field": "email",
+        "message": "Invalid email format",
+        "code": "VAL-001"
+      }
+    ]
+  },
+  "timestamp": "2026-04-01T16:45:48"
+}
+```
+
+### Business Logic Error Response
+```json
+{
+  "status": 409,
+  "message": "employees",
+  "error": {
+    "code": "EMPL-002",
+    "message": "employees",
+    "traceId": "2885b0a7-34ce-49e7-bc82-19d70d22d45c",
+    "errors": null
+  },
+  "timestamp": "2026-04-01T16:45:48"
+}
+```
+
+### Paginated Response
+```json
+{
+  "status": 200,
+  "message": null,
+  "data": [
+    {
+      "id": 1,
+      "name": "John Doe",
+      "email": "john@example.com",
+      "dni": "12345678"
+    }
+  ],
+  "pagination": {
+    "currentPage": 0,
+    "totalPages": 5,
+    "totalElements": 100,
+    "size": 20,
+    "first": true,
+    "last": false
+  },
+  "timestamp": "2026-04-01T16:45:48"
+}
+```
+
+## Best Practices
+
+1. **Consistent Error Codes**: Use `ExceptionErrorEnum` for all error codes
+2. **Resource Identification**: Always pass resource name to `ServiceException`
+3. **Validation First**: Perform validation before business logic
+4. **Traceability**: Include traceId for debugging and monitoring
+5. **HTTP Status Mapping**: Map business errors to appropriate HTTP statuses
+6. **Logging**: Add debug logging for request tracking
+7. **Error Messages**: Provide clear, actionable error messages
+
+## Benefits
+
+1. **Centralized Error Handling**: All exceptions handled in one place
+2. **Consistent Response Format**: All APIs return the same structure
+3. **Detailed Error Array**: Multiple validation errors in single response
+4. **Traceability**: Unique traceId for error tracking and debugging
+5. **Service Layer Integration**: Business logic can throw structured exceptions
+6. **Client-Friendly**: Clear error codes and messages for API consumers
+7. **Monitoring Ready**: Standardized format for logging and monitoring systems
+
+This system ensures you never get inconsistent error responses and provides comprehensive error information with arrays of specific validation issues.
