@@ -1,0 +1,286 @@
+# Pagination Integration Guide
+
+## Architecture
+
+The pagination system is built using Spring Data's `Page` and `Pageable` interfaces, combined with custom DTOs for standardized API responses.
+
+### Key Components
+
+1. **Spring Data Pagination**: Uses `Page<T>`, `Pageable`, `PageRequest`
+2. **Custom DTOs**: `PaginationInfo` and `ApiResponse` from `catalogo-common`
+3. **Global Page Conversion**: Automatic 1-based to 0-based page conversion via `@InitBinder`
+
+## Pagination Standards
+
+### 1. API Response Structure
+
+All paginated endpoints return a standardized `ApiResponse`:
+
+```json
+{
+  "status": 200,
+  "message": null,
+  "data": [...], // Array of results
+  "error": null,
+  "timestamp": "2026-03-25T12:00:00",
+  "pagination": {
+    "dir": ["ASC", "DESC"],
+    "sort": ["field1", "field2"],
+    "count": 150, // Total elements
+    "page": 0, // Current page (0-based)
+    "size": 20, // Page size
+    "totalPages": 8 // Total pages
+  }
+}
+```
+
+### 2. Controller Parameters
+
+Standard pagination parameters for GET endpoints:
+
+```java
+@GetMapping
+public ResponseEntity<ApiResponse> getItems(
+    @RequestParam(defaultValue = "field1,field2") String[] sort,
+    @RequestParam(defaultValue = "ASC,DESC") String[] dir,
+    @RequestParam(defaultValue = "20") Integer size,
+    @RequestParam(defaultValue = "1") Integer page,
+    @RequestParam(required = false) String searchTerm,
+    // Other filter parameters...
+) {
+    // Implementation
+}
+```
+
+### 3. Page Number Handling
+
+**Important**: The system automatically converts 1-based page numbers (from frontend) to 0-based (Spring Data) via `@InitBinder` in the main application class.
+
+```java
+@InitBinder
+public void initBinder(WebDataBinder binder) {
+    binder.registerCustomEditor(Integer.class, "page", new PropertyEditorSupport() {
+        @Override
+        public void setAsText(String text) {
+            setValue(Integer.parseInt(text) - 1); // Convert to 0-based
+        }
+    });
+}
+```
+
+## Step-by-Step Integration
+
+### Step 1: Add Pagination Parameters to Controller
+
+Add standard pagination parameters to your GET endpoint:
+
+```java
+@GetMapping("/your-endpoint")
+@ApiOperation(value = "Get paginated items", notes = "Get a paginated list of items")
+public ResponseEntity<ApiResponse> getYourItems(
+    @RequestParam(defaultValue = "id") String[] sort,
+    @RequestParam(defaultValue = "DESC") String[] dir,
+    @RequestParam(defaultValue = "20") Integer size,
+    @RequestParam(defaultValue = "1") Integer page,
+    @RequestParam(required = false) String searchTerm
+) {
+    // Call service method
+    Map<String, Object> result = yourService.getPaginatedItems(sort, dir, size, page, searchTerm);
+    
+    // Return standardized response
+    return ResponseEntity.ok(new ApiResponse(
+        result.get("data"), 
+        (PaginationInfo) result.get(Text.PAGINATION_INFO)
+    ));
+}
+```
+
+### Step 2: Implement Service Layer Method
+
+Create a service method that returns paginated data:
+
+```java
+@Service
+public class YourServiceImpl implements YourService {
+    
+    @Override
+    public Map<String, Object> getPaginatedItems(String[] sort, String[] dir, Integer size, Integer page, String searchTerm) {
+        // Get paginated elements
+        Page<YourEntity> elements = getPaginatedElements(sort, dir, size, page, searchTerm);
+        
+        // Prepare response
+        Map<String, Object> response = new HashMap<>();
+        response.put("data", elements.getContent());
+        
+        response.put(Text.PAGINATION_INFO, new PaginationInfo(
+            dir,
+            sort,
+            elements.getTotalElements(),
+            page,
+            size,
+            elements.getTotalPages()
+        ));
+        
+        return response;
+    }
+    
+    @Override
+    public Page<YourEntity> getPaginatedElements(String[] sort, String[] dir, Integer size, Integer page, String searchTerm) {
+        // Create sorting
+        Sort sortElement = Sort.by(
+            IntStream.range(0, sort.length)
+                .mapToObj(i -> new Sort.Order(Sort.Direction.valueOf(dir[i].toUpperCase()), sort[i]))
+                .toList()
+        );
+        
+        // Create pageable
+        Pageable pageable = PageRequest.of(page, size, sortElement);
+        
+        // Build specification for filtering
+        Specification<YourEntity> spec = Specification.where(
+            YourSpecification.withSearchTerm(searchTerm)
+                .and(YourSpecification.withNotDeleted())
+        );
+        
+        // Return paginated results
+        return yourRepository.findAll(spec, pageable);
+    }
+}
+```
+
+### Step 3: Create Repository with Pagination Support
+
+Ensure your repository extends `JpaRepository` or `JpaSpecificationExecutor`:
+
+```java
+@Repository
+public interface YourRepository extends JpaRepository<YourEntity, Long>, JpaSpecificationExecutor<YourEntity> {
+    // Custom queries if needed
+}
+```
+
+### Step 4: Create Specification for Filtering (Optional but Recommended)
+
+Create specifications for complex filtering:
+
+```java
+public class YourSpecification {
+    
+    public static Specification<YourEntity> withSearchTerm(String searchTerm) {
+        return (root, query, criteriaBuilder) -> {
+            if (searchTerm == null || searchTerm.trim().isEmpty()) {
+                return criteriaBuilder.conjunction();
+            }
+            
+            String searchPattern = "%" + searchTerm.toLowerCase() + "%";
+            return criteriaBuilder.or(
+                criteriaBuilder.like(criteriaBuilder.lower(root.get("name")), searchPattern),
+                criteriaBuilder.like(criteriaBuilder.lower(root.get("description")), searchPattern)
+            );
+        };
+    }
+    
+    public static Specification<YourEntity> withNotDeleted() {
+        return (root, query, criteriaBuilder) -> 
+            criteriaBuilder.isNull(root.get("deletedDate"));
+    }
+}
+```
+
+## Advanced Features
+
+### 1. Complex Sorting with Custom Logic
+
+For complex sorting (like enum-based sorting), use native SQL queries:
+
+```java
+@Override
+public Page<YourEntity> getPaginatedElements(String[] sort, String[] dir, Integer size, Integer page, String searchTerm) {
+    // Check if special sorting is needed
+    boolean hasSpecialSort = Arrays.asList(sort).contains("specialField");
+    
+    if (!hasSpecialSort) {
+        // Use standard Spring Data approach
+        return getStandardPaginatedElements(sort, dir, size, page, searchTerm);
+    }
+    
+    // Use native SQL for complex sorting
+    return getNativeQueryPaginatedElements(sort, dir, size, page, searchTerm);
+}
+
+private Page<YourEntity> getNativeQueryPaginatedElements(String[] sort, String[] dir, Integer size, Integer page, String searchTerm) {
+    // Build SQL query
+    String sqlQuery = buildSqlQuery(searchTerm, sort, dir);
+    
+    // Create native query
+    Query query = entityManager.createNativeQuery(sqlQuery, YourEntity.class);
+    
+    // Set parameters
+    setParameter(query, "searchTerm", searchTerm.toLowerCase());
+    setParameter(query, "pageSize", size);
+    setParameter(query, "offset", page * size);
+    
+    // Execute query
+    List<YourEntity> content = query.unwrap(org.hibernate.query.NativeQuery.class).getResultList();
+    
+    // Build and execute count query
+    String countQuery = buildCountQuery(searchTerm);
+    Query countNativeQuery = entityManager.createNativeQuery(countQuery);
+    setParameter(countNativeQuery, "searchTerm", searchTerm.toLowerCase());
+    long totalElements = ((Number) countNativeQuery.getSingleResult()).longValue();
+    
+    // Return Page object
+    return new PageImpl<>(content, PageRequest.of(page, size), totalElements);
+}
+```
+
+### 2. Dynamic Sorting with Multiple Fields
+
+Handle multiple sort fields with different directions:
+
+```java
+private Sort createSort(String[] sort, String[] dir) {
+    // Ensure dir array has same length as sort array
+    if (dir == null || dir.length < sort.length) {
+        String[] newDir = new String[sort.length];
+        for (int i = 0; i < sort.length; i++) {
+            newDir[i] = (dir != null && i < dir.length) ? dir[i] : "ASC";
+        }
+        dir = newDir;
+    }
+    
+    return Sort.by(
+        IntStream.range(0, sort.length)
+            .mapToObj(i -> new Sort.Order(Sort.Direction.valueOf(dir[i].toUpperCase()), sort[i]))
+            .toList()
+    );
+}
+```
+
+## Best Practices
+
+### 1. Default Values
+
+Always provide sensible defaults:
+- **size**: 20 (standard page size)
+- **page**: 1 (first page)
+- **sort**: Most relevant field (usually `id` or `createdDate`)
+- **dir**: `DESC` for recent items, `ASC` for alphabetical
+
+### 2. Performance Considerations
+
+- Use database indexes on frequently sorted columns
+- Limit maximum page size (e.g., max 100 items per page)
+- Consider using `@Cacheable` for frequently accessed data
+- Use projections for large entities to reduce data transfer
+
+### 3. Security
+
+Always include authorization checks on paginated endpoints:
+
+```java
+@PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_USER')")
+public ResponseEntity<ApiResponse> getPaginatedItems(...) {
+    // Implementation
+}
+```
